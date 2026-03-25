@@ -1,0 +1,588 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Otto – Voice Interface</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0c0c10;
+      --surface: #16161e;
+      --surface-alt: #1e1e2a;
+      --border: #2a2a3a;
+      --text: #e4e4e7;
+      --text-muted: #71717a;
+      --accent: #a855f7;
+      --accent-dim: rgba(168, 85, 247, .15);
+      --green: #22c55e;
+      --green-dim: rgba(34, 197, 94, .12);
+      --red: #ef4444;
+      --red-dim: rgba(239, 68, 68, .12);
+      --amber: #f59e0b;
+      --amber-dim: rgba(245, 158, 11, .12);
+      --tool-color: #38bdf8;
+      --tool-dim: rgba(56, 189, 248, .12);
+      --radius: 12px;
+      --font: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      --mono: "JetBrains Mono", "Fira Code", "Cascadia Code", monospace;
+    }
+
+    body {
+      font-family: var(--font);
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100dvh;
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+      padding: 2rem 1rem;
+    }
+
+    .container { width: 100%; max-width: 620px; }
+
+    header { text-align: center; margin-bottom: 1.5rem; }
+    header h1 { font-size: 1.5rem; font-weight: 700; letter-spacing: -.02em; }
+    header h1 span { color: var(--accent); }
+    header p { color: var(--text-muted); font-size: .85rem; margin-top: .25rem; }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.5rem;
+    }
+
+    /* ---- controls ---- */
+    .controls { display: flex; gap: .75rem; align-items: center; margin-bottom: 1.25rem; }
+    button {
+      font-family: var(--font);
+      font-size: .85rem;
+      font-weight: 600;
+      border: none;
+      border-radius: 8px;
+      padding: .6rem 1.25rem;
+      cursor: pointer;
+      transition: background .15s, opacity .15s;
+      white-space: nowrap;
+    }
+    button:disabled { opacity: .4; cursor: not-allowed; }
+    .btn-start { background: var(--accent); color: #fff; }
+    .btn-start:hover:not(:disabled) { background: #9333ea; }
+    .btn-end { background: var(--red-dim); color: var(--red); border: 1px solid rgba(239,68,68,.25); }
+    .btn-end:hover:not(:disabled) { background: rgba(239,68,68,.22); }
+
+    /* ---- status bar ---- */
+    .status-bar {
+      display: flex;
+      align-items: center;
+      gap: .5rem;
+      padding: .6rem .85rem;
+      background: var(--surface-alt);
+      border-radius: 8px;
+      font-size: .8rem;
+      margin-bottom: 1.25rem;
+    }
+    .status-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--text-muted);
+      flex-shrink: 0;
+    }
+    .status-dot.connected  { background: var(--green);  box-shadow: 0 0 6px var(--green); }
+    .status-dot.error      { background: var(--red);    box-shadow: 0 0 6px var(--red); }
+    .status-dot.connecting { background: var(--amber);  animation: pulse-dot .9s ease-in-out infinite; }
+    @keyframes pulse-dot { 0%,100% { opacity: 1; } 50% { opacity: .35; } }
+    .status-text { flex: 1; color: var(--text-muted); }
+    .call-timer { color: var(--text-muted); font-variant-numeric: tabular-nums; }
+
+    /* ---- visualiser ---- */
+    .visualiser {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 72px;
+      margin-bottom: 1.25rem;
+    }
+    .vis-bars { display: flex; gap: 3px; align-items: center; height: 100%; }
+    .vis-bar {
+      width: 4px;
+      border-radius: 2px;
+      background: var(--accent);
+      opacity: .25;
+      transition: height .08s ease, opacity .08s ease;
+      height: 6px;
+    }
+
+    /* ---- transcript ---- */
+    .transcript-label {
+      font-size: .7rem;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      color: var(--text-muted);
+      margin-bottom: .5rem;
+    }
+    .transcript {
+      max-height: 360px;
+      overflow-y: auto;
+      padding: .5rem .75rem;
+      background: var(--surface-alt);
+      border-radius: 8px;
+      font-size: .82rem;
+      line-height: 1.55;
+      scroll-behavior: smooth;
+    }
+    .transcript::-webkit-scrollbar { width: 4px; }
+    .transcript::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+    .transcript .msg { margin-bottom: .55rem; }
+    .transcript .msg:last-child { margin-bottom: 0; }
+    .transcript .role { font-weight: 600; margin-right: .35rem; }
+    .transcript .role.otto { color: var(--accent); }
+    .transcript .role.user { color: var(--green); }
+    .transcript .role.tool { color: var(--tool-color); }
+    .transcript .empty { color: var(--text-muted); font-style: italic; }
+
+    /* tool call display */
+    .tool-call {
+      background: var(--tool-dim);
+      border: 1px solid rgba(56,189,248,.2);
+      border-radius: 6px;
+      padding: .4rem .6rem;
+      margin: .3rem 0;
+      font-family: var(--mono);
+      font-size: .75rem;
+      color: var(--tool-color);
+    }
+    .tool-call .tool-name { font-weight: 700; }
+    .tool-result {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: .4rem .6rem;
+      margin: .1rem 0 .3rem;
+      font-family: var(--mono);
+      font-size: .72rem;
+      color: var(--text-muted);
+      white-space: pre-wrap;
+      word-break: break-all;
+      max-height: 120px;
+      overflow-y: auto;
+    }
+
+    /* ---- error ---- */
+    .error-box {
+      margin-top: 1rem;
+      padding: .75rem 1rem;
+      background: var(--red-dim);
+      border: 1px solid rgba(239,68,68,.25);
+      border-radius: 8px;
+      color: var(--red);
+      font-size: .82rem;
+      display: none;
+    }
+    .error-box.show { display: block; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1><span>Otto</span> Voice Interface</h1>
+      <p>OpenAI Realtime · Real Otto Tools</p>
+    </header>
+
+    <div class="card">
+      <div class="controls">
+        <button class="btn-start" id="btn-start">Start</button>
+        <button class="btn-end"   id="btn-end"   disabled>End</button>
+      </div>
+
+      <div class="status-bar">
+        <div class="status-dot" id="status-dot"></div>
+        <div class="status-text" id="status-text">Ready</div>
+        <div class="call-timer" id="call-timer"></div>
+      </div>
+
+      <div class="visualiser" id="visualiser">
+        <div class="vis-bars" id="vis-bars"></div>
+      </div>
+
+      <div class="transcript-label">Conversation</div>
+      <div class="transcript" id="transcript">
+        <div class="empty">Say something to Otto…</div>
+      </div>
+
+      <div class="error-box" id="error-box"></div>
+    </div>
+  </div>
+
+<script>
+// ---------------------------------------------------------------------------
+// State
+// ---------------------------------------------------------------------------
+let sessionId   = null;
+let pc          = null;
+let dc          = null;
+let localStream = null;
+let audioCtx    = null;
+let analyser    = null;
+let timerInterval = null;
+let callStart   = null;
+
+// Transcript streaming state
+let currentOttoText     = '';
+let currentResponseId   = null;
+let streamingEl         = null;
+
+const BAR_COUNT = 48;
+
+const $btnStart   = document.getElementById('btn-start');
+const $btnEnd     = document.getElementById('btn-end');
+const $statusDot  = document.getElementById('status-dot');
+const $statusText = document.getElementById('status-text');
+const $callTimer  = document.getElementById('call-timer');
+const $visBars    = document.getElementById('vis-bars');
+const $transcript = document.getElementById('transcript');
+const $errorBox   = document.getElementById('error-box');
+
+// Build visualiser bars
+for (let i = 0; i < BAR_COUNT; i++) {
+  const bar = document.createElement('div');
+  bar.className = 'vis-bar';
+  $visBars.appendChild(bar);
+}
+
+$btnStart.addEventListener('click', startCall);
+$btnEnd.addEventListener('click', endCall);
+
+// ---------------------------------------------------------------------------
+// Start call
+// ---------------------------------------------------------------------------
+async function startCall() {
+  resetUI();
+  setStatus('connecting', 'Creating session…');
+  $btnStart.disabled = true;
+
+  try {
+    // 1. Create server session
+    const sessResp = await fetch('/session', { method: 'POST' });
+    if (!sessResp.ok) {
+      const err = await sessResp.json().catch(() => ({}));
+      throw new Error(err.detail || `Session creation failed (${sessResp.status})`);
+    }
+    const { session_id, client_secret } = await sessResp.json();
+    sessionId = session_id;
+
+    setStatus('connecting', 'Connecting…');
+
+    // 2. Microphone
+    localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    setupAudioVisualiser(localStream);
+
+    // 3. WebRTC peer connection
+    pc = new RTCPeerConnection();
+    localStream.getTracks().forEach(t => pc.addTrack(t, localStream));
+
+    // Remote audio playback
+    const audioEl = document.createElement('audio');
+    audioEl.autoplay = true;
+    pc.ontrack = (e) => { audioEl.srcObject = e.streams[0]; };
+
+    // 4. Data channel
+    dc = pc.createDataChannel('oai-events');
+    dc.onopen    = onDataChannelOpen;
+    dc.onmessage = onDataChannelMessage;
+
+    pc.oniceconnectionstatechange = () => {
+      if (['failed','disconnected','closed'].includes(pc.iceConnectionState)) {
+        setStatus('error', 'Connection lost');
+      }
+    };
+
+    // 5. SDP exchange with OpenAI
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+
+    const sdpResp = await fetch('https://api.openai.com/v1/realtime/calls', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${client_secret}`,
+        'Content-Type': 'application/sdp',
+      },
+      body: offer.sdp,
+    });
+    if (!sdpResp.ok) throw new Error(`SDP exchange failed (${sdpResp.status})`);
+    const answer = await sdpResp.text();
+    await pc.setRemoteDescription({ type: 'answer', sdp: answer });
+
+    $btnEnd.disabled = false;
+
+  } catch (e) {
+    showError(e.message);
+    setStatus('error', 'Failed');
+    $btnStart.disabled = false;
+    cleanup();
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Data channel
+// ---------------------------------------------------------------------------
+function onDataChannelOpen() {
+  setStatus('connected', 'Connected — Otto is listening');
+  startTimer();
+
+  // Enable Whisper transcription + server VAD
+  dc.send(JSON.stringify({
+    type: 'session.update',
+    session: {
+      type: 'realtime',
+      audio: {
+        input: {
+          transcription: { model: 'whisper-1' },
+          turn_detection: {
+            type: 'server_vad',
+            threshold: 0.5,
+            prefix_padding_ms: 300,
+            silence_duration_ms: 500,
+          },
+        },
+      },
+    },
+  }));
+
+  // Kick off Otto's first greeting
+  dc.send(JSON.stringify({ type: 'response.create' }));
+}
+
+function onDataChannelMessage(ev) {
+  let event;
+  try { event = JSON.parse(ev.data); } catch { return; }
+
+  switch (event.type) {
+    // Otto speech — streaming transcript
+    case 'response.output_audio_transcript.delta':
+    case 'response.audio_transcript.delta':
+      if (event.response_id !== currentResponseId) {
+        if (currentOttoText) finalizOttoMessage();
+        currentResponseId = event.response_id;
+        currentOttoText   = '';
+      }
+      currentOttoText += event.delta;
+      updateStreamingOttoMessage(currentOttoText);
+      break;
+
+    case 'response.output_audio_transcript.done':
+    case 'response.audio_transcript.done':
+      currentOttoText = event.transcript || currentOttoText;
+      finalizOttoMessage();
+      currentResponseId = null;
+      break;
+
+    // User speech — Whisper transcript
+    case 'conversation.item.input_audio_transcription.completed':
+    case 'conversation.item.input_audio_transcription.done':
+      {
+        const text = (event.transcript || event.text || '').trim();
+        if (text) appendTranscript('user', 'You', text);
+      }
+      break;
+
+    // Tool call from Otto
+    case 'response.function_call_arguments.done':
+      handleToolCall(event);
+      break;
+
+    case 'error':
+      console.error('Realtime error:', event);
+      showError(event.error?.message || 'Realtime API error');
+      break;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Tool execution — sends to server, which runs real BashExecutor
+// ---------------------------------------------------------------------------
+async function handleToolCall(event) {
+  const toolName = event.name;
+  let args;
+  try { args = JSON.parse(event.arguments); } catch { args = {}; }
+
+  // Show the tool call in transcript
+  const callEl = appendToolCall(toolName, args);
+
+  let result;
+  try {
+    const resp = await fetch(`/session/${sessionId}/tool`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: toolName, arguments: args }),
+    });
+    result = await resp.json();
+  } catch (e) {
+    result = { error: e.message };
+  }
+
+  // Show result in transcript
+  appendToolResult(callEl, result);
+
+  // Feed result back to OpenAI Realtime
+  dc.send(JSON.stringify({
+    type: 'conversation.item.create',
+    item: {
+      type: 'function_call_output',
+      call_id: event.call_id,
+      output: JSON.stringify(result),
+    },
+  }));
+  dc.send(JSON.stringify({ type: 'response.create' }));
+}
+
+// ---------------------------------------------------------------------------
+// End call
+// ---------------------------------------------------------------------------
+function endCall() {
+  if (sessionId) {
+    fetch(`/session/${sessionId}`, { method: 'DELETE' }).catch(() => {});
+  }
+  cleanup();
+  setStatus('idle', 'Call ended');
+  $btnStart.disabled = false;
+  $btnEnd.disabled = true;
+  stopTimer();
+}
+
+function cleanup() {
+  if (dc)          { try { dc.close(); } catch {} dc = null; }
+  if (pc)          { pc.close(); pc = null; }
+  if (localStream) { localStream.getTracks().forEach(t => t.stop()); localStream = null; }
+  if (audioCtx)    { audioCtx.close(); audioCtx = null; analyser = null; }
+}
+
+// ---------------------------------------------------------------------------
+// UI helpers
+// ---------------------------------------------------------------------------
+function setStatus(state, text) {
+  $statusDot.className = 'status-dot ' + (state === 'idle' ? '' : state);
+  $statusText.textContent = text;
+}
+
+function resetUI() {
+  $transcript.innerHTML = '';
+  $errorBox.className = 'error-box';
+  $callTimer.textContent = '';
+  currentOttoText = '';
+  currentResponseId = null;
+  streamingEl = null;
+}
+
+function showError(msg) {
+  $errorBox.textContent = msg;
+  $errorBox.className = 'error-box show';
+}
+
+// -- Transcript --
+
+function removeEmpty() {
+  const emp = $transcript.querySelector('.empty');
+  if (emp) emp.remove();
+}
+
+function escapeHtml(s) {
+  const d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+function appendTranscript(roleClass, label, text) {
+  removeEmpty();
+  const div = document.createElement('div');
+  div.className = 'msg';
+  div.innerHTML = `<span class="role ${roleClass}">${label}:</span>${escapeHtml(text)}`;
+  $transcript.appendChild(div);
+  $transcript.scrollTop = $transcript.scrollHeight;
+  return div;
+}
+
+function updateStreamingOttoMessage(text) {
+  removeEmpty();
+  if (!streamingEl) {
+    streamingEl = document.createElement('div');
+    streamingEl.className = 'msg';
+    $transcript.appendChild(streamingEl);
+  }
+  streamingEl.innerHTML = `<span class="role otto">Otto:</span>${escapeHtml(text)}`;
+  $transcript.scrollTop = $transcript.scrollHeight;
+}
+
+function finalizOttoMessage() {
+  if (!currentOttoText) return;
+  if (streamingEl) { streamingEl.remove(); streamingEl = null; }
+  appendTranscript('otto', 'Otto', currentOttoText);
+  currentOttoText = '';
+}
+
+function appendToolCall(toolName, args) {
+  removeEmpty();
+  const wrapper = document.createElement('div');
+  const callDiv = document.createElement('div');
+  callDiv.className = 'tool-call';
+  const argsStr = JSON.stringify(args, null, 0);
+  callDiv.innerHTML = `<span class="tool-name">⚡ ${escapeHtml(toolName)}</span> <span style="opacity:.7">${escapeHtml(argsStr.length > 80 ? argsStr.slice(0,80)+'…' : argsStr)}</span>`;
+  wrapper.appendChild(callDiv);
+  $transcript.appendChild(wrapper);
+  $transcript.scrollTop = $transcript.scrollHeight;
+  return wrapper;
+}
+
+function appendToolResult(wrapper, result) {
+  const resultDiv = document.createElement('div');
+  resultDiv.className = 'tool-result';
+  const text = result.output ?? result.error ?? JSON.stringify(result);
+  resultDiv.textContent = text.length > 500 ? text.slice(0, 500) + '\n… (truncated)' : text;
+  wrapper.appendChild(resultDiv);
+  $transcript.scrollTop = $transcript.scrollHeight;
+}
+
+// -- Timer --
+function startTimer() {
+  callStart = Date.now();
+  timerInterval = setInterval(() => {
+    const s = Math.floor((Date.now() - callStart) / 1000);
+    $callTimer.textContent = `${String(Math.floor(s/60)).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`;
+  }, 1000);
+}
+function stopTimer() {
+  if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
+  $callTimer.textContent = '';
+}
+
+// ---------------------------------------------------------------------------
+// Audio visualiser
+// ---------------------------------------------------------------------------
+function setupAudioVisualiser(stream) {
+  audioCtx = new AudioContext();
+  const source = audioCtx.createMediaStreamSource(stream);
+  analyser = audioCtx.createAnalyser();
+  analyser.fftSize = 128;
+  source.connect(analyser);
+  drawVisualiser();
+}
+
+function drawVisualiser() {
+  if (!analyser) return;
+  requestAnimationFrame(drawVisualiser);
+  const data = new Uint8Array(analyser.frequencyBinCount);
+  analyser.getByteFrequencyData(data);
+  const bars = $visBars.children;
+  const step = Math.floor(data.length / BAR_COUNT);
+  for (let i = 0; i < BAR_COUNT; i++) {
+    const val = data[i * step] || 0;
+    const norm = val / 255;
+    bars[i].style.height = Math.max(4, norm * 60) + 'px';
+    bars[i].style.opacity = 0.25 + norm * 0.75;
+  }
+}
+</script>
+</body>
+</html>
